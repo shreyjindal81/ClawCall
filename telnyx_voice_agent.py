@@ -160,6 +160,7 @@ class CallSession:
 
         # Async event for faster barge-in notification (set from sync thread)
         self.barge_in_async_notify = None  # Will be set to asyncio.Event in async context
+        self.hangup_async_notify = None  # Will be set to asyncio.Event for immediate hangup
         self.event_loop = None  # Reference to the async event loop
 
         # Deepgram thread
@@ -364,6 +365,14 @@ def handle_function_call(message, connection, session: CallSession):
                 # Signal hangup if needed
                 if func_name == "hangup":
                     session.should_hangup.set()
+                    # Notify async context immediately for fast hangup
+                    if session.hangup_async_notify and session.event_loop:
+                        try:
+                            session.event_loop.call_soon_threadsafe(
+                                session.hangup_async_notify.set
+                            )
+                        except Exception:
+                            pass  # Event loop might be closed
 
                 # Send response back to agent
                 response = AgentV1FunctionCallResponseMessage(
@@ -489,6 +498,7 @@ async def telnyx_websocket(websocket: WebSocket):
 
     session: CallSession = None
     output_task = None
+    hangup_task = None
 
     async def handle_barge_in():
         """Handle barge-in: clear queue AND tell Telnyx to stop playing."""
@@ -572,11 +582,8 @@ async def telnyx_websocket(websocket: WebSocket):
             try:
                 data = await asyncio.wait_for(websocket.receive_text(), timeout=0.1)
             except asyncio.TimeoutError:
-                # Check if we should hangup
-                if session and session.should_hangup.is_set():
-                    logger.info("[WebSocket] Hangup requested")
-                    if call_manager:
-                        await call_manager.hangup(session.call_control_id)
+                # Check if stop was signaled (e.g., by hangup watcher)
+                if session and session.stop_event.is_set():
                     break
                 continue
 
@@ -597,9 +604,20 @@ async def telnyx_websocket(websocket: WebSocket):
                 # Create session (starts Deepgram worker)
                 session = session_manager.create_session(stream_id, call_control_id)
 
-                # Initialize async event for fast barge-in notification
+                # Initialize async events for fast notification
                 session.barge_in_async_notify = asyncio.Event()
+                session.hangup_async_notify = asyncio.Event()
                 session.event_loop = asyncio.get_running_loop()
+
+                # Hangup watcher task - executes hangup immediately when signaled
+                async def hangup_watcher():
+                    await session.hangup_async_notify.wait()
+                    logger.info("[Hangup] Executing hangup immediately")
+                    if call_manager and session.call_control_id:
+                        await call_manager.hangup(session.call_control_id)
+                    session.stop_event.set()
+
+                hangup_task = asyncio.create_task(hangup_watcher())
 
                 # Start output task
                 output_task = asyncio.create_task(send_output_audio())
@@ -632,6 +650,8 @@ async def telnyx_websocket(websocket: WebSocket):
     finally:
         if output_task:
             output_task.cancel()
+        if hangup_task:
+            hangup_task.cancel()
         if session:
             session_manager.close_session(session.stream_id)
 
