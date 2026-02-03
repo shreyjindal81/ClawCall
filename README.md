@@ -1,0 +1,127 @@
+# Telnyx Voice Agent
+
+AI-powered phone agent using Deepgram Voice Agent API and Telnyx for telephony.
+
+## Features
+
+- **Phone calls**: Receive and make calls via Telnyx
+- **Voice AI**: Deepgram Voice Agent API (STT + LLM + TTS in one)
+- **Barge-in**: Interrupt the agent mid-speech
+- **Tool support**: Client-side function execution (e.g., hangup, custom tools)
+- **Customizable**: Pass custom prompts and greetings via CLI
+
+## Requirements
+
+- Python 3.10+
+- Telnyx account with a phone number and TeXML application
+- Deepgram account with Voice Agent API access
+- ngrok (or similar) for exposing local server
+
+## Setup
+
+1. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+2. Copy `.env.example` to `.env` and fill in your credentials:
+```bash
+cp .env.example .env
+```
+
+3. Configure Telnyx:
+   - Create a TeXML application in the Telnyx portal
+   - Set the webhook URL to your ngrok endpoint (e.g., `https://your-domain.ngrok-free.dev/webhook`)
+   - Enable bidirectional streaming
+   - Note your Connection ID
+
+4. (Optional) Set up ngrok auth token for `--ngrok` flag:
+```bash
+# Add to .env or export directly
+export NGROK_AUTH_TOKEN=your_ngrok_auth_token
+```
+
+## Usage
+
+### Server-only mode (receive inbound calls):
+```bash
+python telnyx_voice_agent.py --server-only
+```
+
+### With automatic ngrok tunnel:
+```bash
+python telnyx_voice_agent.py --server-only --ngrok
+```
+
+### With custom ngrok domain (paid plan):
+```bash
+python telnyx_voice_agent.py --server-only --ngrok --ngrok-domain your-domain.ngrok-free.dev
+```
+
+### Make an outbound call:
+```bash
+python telnyx_voice_agent.py --to "+1234567890" --ngrok
+```
+
+### Custom agent persona:
+```bash
+python telnyx_voice_agent.py --server-only --ngrok \
+  --prompt "You are a helpful assistant for Acme Corp..." \
+  --greeting "Hello! Thanks for calling Acme Corp. How can I help?"
+```
+
+### Debug mode:
+```bash
+python telnyx_voice_agent.py --server-only --debug
+```
+
+## Architecture
+
+```
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│    Phone     │◄───►│    Telnyx    │◄───►│  This Server │
+│   (mulaw)    │     │   (WebSocket)│     │  (FastAPI)   │
+└──────────────┘     └──────────────┘     └──────┬───────┘
+                                                 │
+                                          Thread-safe queues
+                                                 │
+                                          ┌──────▼───────┐
+                                          │   Deepgram   │
+                                          │ Voice Agent  │
+                                          │  (linear16)  │
+                                          └──────────────┘
+```
+
+- **Telnyx**: Handles phone connectivity, sends/receives mulaw 8kHz audio
+- **FastAPI**: WebSocket server bridging Telnyx and Deepgram
+- **Deepgram Voice Agent**: All-in-one STT + LLM (Claude) + TTS
+
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `TELNYX_API_KEY` | Telnyx API key |
+| `TELNYX_CONNECTION_ID` | TeXML application connection ID |
+| `TELNYX_PHONE_NUMBER` | Your Telnyx phone number |
+| `DEEPGRAM_API_KEY` | Deepgram API key |
+| `PUBLIC_WS_URL` | Public WebSocket URL (used if not using --ngrok) |
+| `SERVER_HOST` | Server host (default: 0.0.0.0) |
+| `SERVER_PORT` | Server port (default: 8765) |
+| `NGROK_AUTH_TOKEN` | ngrok auth token (optional, for --ngrok flag) |
+
+## Adding Custom Tools
+
+Edit the `TOOL_HANDLERS` dict and `create_agent_settings()` in `telnyx_voice_agent.py`:
+
+```python
+def my_tool_handler(parameters: dict) -> str:
+    # Your logic here
+    return "Result"
+
+TOOL_HANDLERS = {
+    "my_tool": my_tool_handler,
+    # ...
+}
+```
+
+Then add the function definition in `create_agent_settings()`.
