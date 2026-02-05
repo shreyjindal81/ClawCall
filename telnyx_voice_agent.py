@@ -74,8 +74,6 @@ logger = logging.getLogger(__name__)
 # Valid models per provider (managed by Deepgram - no custom endpoint required)
 VALID_MODELS = {
     "anthropic": [
-        "claude-sonnet-4-5",
-        "claude-4-5-haiku-latest",
         "claude-3-5-haiku-latest",
         "claude-sonnet-4-20250514",
     ],
@@ -195,7 +193,7 @@ def get_all_valid_models() -> list[str]:
 
 class Config:
     """Application configuration."""
-    def __init__(self, prompt: str = None, greeting: str = None, model: str = None, voice: str = None):
+    def __init__(self, personality: str = None, task: str = None, greeting: str = None, model: str = None, voice: str = None):
         self.telnyx_api_key = os.environ.get("TELNYX_API_KEY", "")
         self.telnyx_connection_id = os.environ.get("TELNYX_CONNECTION_ID", "")
         self.telnyx_phone_number = os.environ.get("TELNYX_PHONE_NUMBER", "")
@@ -204,22 +202,74 @@ class Config:
         self.server_host = os.environ.get("SERVER_HOST", "0.0.0.0")
         self.server_port = int(os.environ.get("SERVER_PORT", "8765"))
         # Agent customization
-        self.agent_prompt = prompt
+        self.agent_personality = personality
+        self.agent_task = task
         self.agent_greeting = greeting
         self.agent_model = model or DEFAULT_MODEL
         self.agent_voice = voice or DEFAULT_VOICE
 
 
-# Agent configuration
-AGENT_PROMPT = """You are a test voice agent. This is a demo environment for testing voice AI capabilities.
+# ============================================
+# SYSTEM PROMPT CONFIGURATION
+# ============================================
 
-Available tools you can use:
-- get_secret: Returns a test secret code when the user asks for it
-- hangup: Ends the call when the user says goodbye or wants to hang up
+# Base prompt baked into all calls - ensures natural conversation
+BASE_PROMPT = """You're on a real phone call. Talk like a human, not an AI.
 
-Be friendly and concise. Let users know they can test the available tools."""
+KEEP IT CONVERSATIONAL:
+- Shorter responses tend to sound more natural - one or two sentences usually works well
+- You can break information into smaller pieces across multiple turns
+- Examples that often work well:
+  "Yeah, so... Tuesday at 3 works great."
+  "Got it. Let me check on that."
+  "Right, and what's the best number to reach you?"
+  "Perfect. I'll get that updated for you."
 
-GREETING = "Hi! This is a test voice agent. You can ask me for a secret code or just chat. Say goodbye when you're done."
+NATURAL SPEECH PATTERNS (use your judgment):
+- Starting with "So...", "Yeah, so...", "Right...", "Got it.", "Okay, so..." can feel natural
+- Acknowledging first often helps: "Makes sense.", "I hear you.", "Got it."
+- Occasional filler words like "Hmm, let me see..." or "Um, actually..." can sound human
+- Casual confirmations work well: "Perfect.", "Great.", "Sounds good."
+
+VOICE OUTPUT FORMAT (CRITICAL):
+- Plain text only - no lists, bullets, or markdown
+- Spell out numbers: "three fifteen" not "3:15"
+- Spell out phone numbers digit by digit: "five one seven, nine four four..."
+- Spell out dates: "Tuesday, January fifteenth"
+- No abbreviations: say "Doctor" not "Dr."
+
+THINGS THAT CAN SOUND ROBOTIC (try to avoid):
+- Overly formal phrases like "I'd be happy to help" or "Certainly"
+- Giving lots of information all at once
+- Corporate/scripted language
+- Long compound sentences with multiple clauses
+
+INFORMATION RULES:
+- Only use facts you were explicitly given
+- If you don't know something, say "I don't have that info handy, let me call you back"
+- Never make up names, dates, times, or details
+
+ENDING CALLS:
+- You decide when to end - task complete, user done, or need to call back
+- A quick goodbye keeps it natural: "Thanks! Take care.", "Great, bye!", "Talk soon!"
+"""
+
+DEFAULT_GREETING = "Hi there! How are you doing today?"
+
+
+def build_system_prompt(personality: str = None, task: str = None) -> str:
+    """Construct the full system prompt from components."""
+    prompt_parts = [BASE_PROMPT]
+
+    if personality:
+        prompt_parts.append(f"\nYOUR PERSONALITY:\n{personality}")
+
+    if task:
+        prompt_parts.append(f"\nYOUR TASK FOR THIS CALL:\n{task}")
+
+    prompt_parts.append("\nRemember: Be natural, be human, and NEVER assume information you weren't given.")
+
+    return "\n".join(prompt_parts)
 
 
 # ============================================
@@ -263,10 +313,13 @@ def get_secret_handler(_parameters: dict) -> str:
     return "ALPHA-BRAVO-7749"
 
 
-def hangup_handler(_parameters: dict) -> str:
+def hangup_handler(parameters: dict) -> str:
     """Signals that the call should end."""
-    logger.info("[TOOL] hangup called")
-    return "Call ended. Goodbye!"
+    reason = parameters.get("reason", "unspecified")
+    logger.info(f"[TOOL] hangup called - reason: {reason}")
+    # Buffer to allow goodbye audio to play before channel drops
+    time.sleep(1)
+    return "Call ended."
 
 
 TOOL_HANDLERS = {
@@ -362,10 +415,10 @@ def create_speak_provider(voice: str):
         )
 
 
-def create_agent_settings(prompt: str = None, greeting: str = None, model: str = None, voice: str = None) -> AgentV1SettingsMessage:
+def create_agent_settings(personality: str = None, task: str = None, greeting: str = None, model: str = None, voice: str = None) -> AgentV1SettingsMessage:
     """Create Deepgram Voice Agent settings."""
-    agent_prompt = prompt or AGENT_PROMPT
-    agent_greeting = greeting or GREETING
+    agent_prompt = build_system_prompt(personality, task)
+    agent_greeting = greeting or DEFAULT_GREETING
     agent_model = model or DEFAULT_MODEL
     agent_voice = voice or DEFAULT_VOICE
 
@@ -403,8 +456,30 @@ def create_agent_settings(prompt: str = None, greeting: str = None, model: str =
                     ),
                     AgentV1Function(
                         name="hangup",
-                        description="Ends the call when the user says goodbye or wants to end.",
-                        parameters={"type": "object", "properties": {}, "required": []}
+                        description="""End the phone call. You have full autonomy to decide when to end the conversation.
+
+IMPORTANT: Before calling this function, ALWAYS say a brief, natural goodbye such as "Goodbye!", "Take care!", "Have a great day!", "Thanks for your time!", or similar.
+
+End the conversation when:
+- The task is complete and confirmed
+- The user wants to end the call (says goodbye, hang up, stop, etc.)
+- The user is unavailable and you've left a message or agreed to call back
+- You're missing critical information and need to call back later
+- The conversation has reached a natural conclusion
+- The user is unresponsive or the call isn't productive
+- Any other reason you deem appropriate to end politely
+
+Always be polite and natural when ending - never hang up abruptly without a goodbye.""",
+                        parameters={
+                            "type": "object",
+                            "properties": {
+                                "reason": {
+                                    "type": "string",
+                                    "description": "Brief reason for ending the call (e.g., 'task complete', 'user requested', 'will call back', 'left message')"
+                                }
+                            },
+                            "required": ["reason"]
+                        }
                     )
                 ]
             ),
@@ -488,7 +563,8 @@ def deepgram_worker(session: CallSession, config: Config):
             # Send settings
             logger.info("[Deepgram] Sending agent settings...")
             connection.send_settings(create_agent_settings(
-                prompt=config.agent_prompt,
+                personality=config.agent_personality,
+                task=config.agent_task,
                 greeting=config.agent_greeting,
                 model=config.agent_model,
                 voice=config.agent_voice
@@ -674,10 +750,10 @@ shutdown_event: asyncio.Event = None  # Signal to shutdown after call ends
 server_only_mode: bool = True  # Whether to stay up after call ends
 
 
-def init_app(prompt: str = None, greeting: str = None, model: str = None, voice: str = None, server_only: bool = True):
+def init_app(personality: str = None, task: str = None, greeting: str = None, model: str = None, voice: str = None, server_only: bool = True):
     """Initialize application components."""
     global config, session_manager, call_manager, shutdown_event, server_only_mode
-    config = Config(prompt=prompt, greeting=greeting, model=model, voice=voice)
+    config = Config(personality=personality, task=task, greeting=greeting, model=model, voice=voice)
     session_manager = SessionManager(config)
     call_manager = CallManager(config)
     shutdown_event = asyncio.Event()
@@ -974,7 +1050,8 @@ Default voice: {DEFAULT_VOICE}
 """
     )
     parser.add_argument("--to", type=str, help="Phone number to call")
-    parser.add_argument("--prompt", type=str, help="System prompt for the agent")
+    parser.add_argument("--personality", type=str, help="Agent personality (e.g., 'friendly receptionist at a dental office')")
+    parser.add_argument("--task", type=str, help="Task for this call (e.g., 'confirm appointment for John Smith tomorrow at 3pm')")
     parser.add_argument("--greeting", type=str, help="Initial greeting message")
     parser.add_argument(
         "--model", type=str, default=DEFAULT_MODEL,
@@ -1008,7 +1085,7 @@ Default voice: {DEFAULT_VOICE}
 
 async def run_server_and_call(args, ngrok_url: str = None):
     """Run the server and optionally make a call."""
-    init_app(prompt=args.prompt, greeting=args.greeting, model=args.model, voice=args.voice, server_only=args.server_only)
+    init_app(personality=args.personality, task=args.task, greeting=args.greeting, model=args.model, voice=args.voice, server_only=args.server_only)
 
     # Override public URL if ngrok provided one
     if ngrok_url:
@@ -1016,8 +1093,10 @@ async def run_server_and_call(args, ngrok_url: str = None):
 
     logger.info(f"Starting server on {config.server_host}:{config.server_port}")
     logger.info(f"Public URL: {config.public_ws_url}")
-    if config.agent_prompt:
-        logger.info(f"Custom prompt: {config.agent_prompt[:50]}...")
+    if config.agent_personality:
+        logger.info(f"Personality: {config.agent_personality[:50]}...")
+    if config.agent_task:
+        logger.info(f"Task: {config.agent_task[:50]}...")
     if config.agent_greeting:
         logger.info(f"Custom greeting: {config.agent_greeting}")
     logger.info(f"Using model: {config.agent_model} ({get_provider_for_model(config.agent_model)})")

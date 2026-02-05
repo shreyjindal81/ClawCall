@@ -12,14 +12,22 @@ AI-powered phone agent using Deepgram Voice Agent API (STT + LLM + TTS) and Teln
 # Make outbound call (exits cleanly after call ends)
 python telnyx_voice_agent.py --to "+1234567890" --ngrok
 
-# With custom agent persona
-python telnyx_voice_agent.py --to "+1234567890" --ngrok --prompt "You are..." --greeting "Hello!"
+# With personality and task (recommended)
+python telnyx_voice_agent.py --to "+1234567890" --ngrok \
+  --personality "Sarah, a friendly receptionist at Smile Dental" \
+  --task "Confirm John's appointment for Tuesday at 3pm"
+
+# With custom greeting
+python telnyx_voice_agent.py --to "+1234567890" --ngrok \
+  --personality "Sales rep at Acme Corp" \
+  --task "Follow up on quote #12345" \
+  --greeting "Hi, is this John? This is Sarah from Acme Corp."
 
 # With different LLM model (default: claude-3-5-haiku-latest)
 python telnyx_voice_agent.py --to "+1234567890" --ngrok --model "gpt-4o-mini"
 
-# With different TTS voice (default: deepgram/aura-2-thalia-en)
-python telnyx_voice_agent.py --to "+1234567890" --ngrok --voice "elevenlabs/rachel"
+# With different TTS voice (default: elevenlabs/rachel)
+python telnyx_voice_agent.py --to "+1234567890" --ngrok --voice "elevenlabs/adam"
 python telnyx_voice_agent.py --to "+1234567890" --ngrok --voice "deepgram/aura-2-orion-en"
 
 # Debug mode (verbose logging)
@@ -68,8 +76,8 @@ Phone ←→ Telnyx (mulaw 8kHz) ←→ FastAPI ←→ Deepgram Thread (linear16
 
 Deepgram Voice Agent supports multiple LLM providers (managed by Deepgram, no API keys needed):
 
-- **Anthropic**: claude-sonnet-4-5, claude-4-5-haiku-latest, claude-3-5-haiku-latest, claude-sonnet-4-20250514
-- **OpenAI**: gpt-5.1-chat-latest, gpt-5.1, gpt-5, gpt-5-mini, gpt-5-nano, gpt-4.1, gpt-4.1-mini, gpt-4.1-nano, gpt-4o, gpt-4o-mini
+- **Anthropic**: claude-3-5-haiku-latest, claude-sonnet-4-20250514
+- **OpenAI**: gpt-4o, gpt-4o-mini
 
 Default: `claude-3-5-haiku-latest`
 
@@ -80,9 +88,23 @@ Use the `--voice` flag with format `provider/voice-id`:
 - **Deepgram** (16kHz output): aura-2-thalia-en, aura-2-luna-en, aura-2-stella-en, aura-2-athena-en, aura-2-hera-en, aura-2-orion-en, aura-2-arcas-en, aura-2-perseus-en, aura-2-angus-en, aura-2-orpheus-en, aura-2-helios-en, aura-2-zeus-en
 - **ElevenLabs** (24kHz output): rachel, adam, bella, josh, elli, sam
 
-Default: `deepgram/aura-2-thalia-en`
+Default: `elevenlabs/rachel`
 
 Audio conversion handles sample rate differences automatically (16kHz or 24kHz → 8kHz mulaw for Telnyx).
+
+## CLI Arguments
+
+- `--to` - Phone number to call (E.164 format)
+- `--personality` - Agent personality description (who they are)
+- `--task` - Task for the call (what to accomplish)
+- `--greeting` - Custom opening greeting
+- `--voice` - TTS voice (provider/voice-id format)
+- `--model` - LLM model to use
+- `--ngrok` - Auto-start ngrok tunnel
+- `--debug` - Enable verbose logging
+- `--server-only` - Run as server only (no outbound call)
+
+The system prompt is built from a base template that ensures natural conversation + the personality and task you provide. The agent will NOT assume information - only use what's explicitly given.
 
 ## Adding Custom Tools
 
