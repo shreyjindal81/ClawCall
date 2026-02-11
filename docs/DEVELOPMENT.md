@@ -466,11 +466,6 @@ Tools are defined in the agent settings:
 AgentV1Think(
     functions=[
         AgentV1Function(
-            name="get_secret",
-            description="Retrieves the user's secret code when requested.",
-            parameters={"type": "object", "properties": {}, "required": []}
-        ),
-        AgentV1Function(
             name="hangup",
             description="Ends the call when the user says goodbye.",
             parameters={"type": "object", "properties": {}, "required": []}
@@ -483,7 +478,6 @@ AgentV1Think(
 
 ```python
 TOOL_HANDLERS = {
-    "get_secret": lambda params: "ALPHA-BRAVO-7749",
     "hangup": lambda params: "Call ended. Goodbye!",
 }
 
@@ -757,7 +751,6 @@ python telnyx_voice_agent.py --server-only --ngrok --debug
 | `User: ...` | User speech transcription |
 | `Agent: ...` | Agent response transcription |
 | `[Barge-in] Cleared N chunks + sent clear to Telnyx` | Barge-in processed |
-| `[TOOL] get_secret called` | Tool was invoked |
 | `[TOOL] hangup called` | Hangup triggered |
 | `[Recording] Download URL: ...` | Recording URL resolved |
 | `[Recording] Saved locally: ...` | Local recording persisted |
@@ -806,7 +799,6 @@ telnyx_voice_agent.py
 │   ├── mulaw_8k_to_linear16_16k()
 │   └── linear16_16k_to_mulaw_8k()
 ├── Tool Handlers
-│   ├── get_secret_handler()
 │   ├── hangup_handler()
 │   └── TOOL_HANDLERS dict
 ├── Session Management

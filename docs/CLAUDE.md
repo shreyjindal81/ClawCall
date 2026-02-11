@@ -59,7 +59,7 @@ Phone ←→ Telnyx (mulaw 8kHz) ←→ Node.js/ws bridge ←→ Deepgram Voice 
 - `CallManager`: Telnyx REST wrapper for outbound calls, hangup, recording retrieval, local persistence, and Telnyx cleanup
 - `/telnyx` WebSocket: Bidirectional Telnyx media stream handler
 - `/webhook` HTTP endpoint: Telnyx webhook receiver
-- `TOOL_HANDLERS`: Function-call handlers (`get_secret`, `hangup`)
+- `TOOL_HANDLERS`: Function-call handlers (`hangup`)
 - `createAgentSettings()`: Deepgram agent settings payload builder
 
 Audio conversion is done in-process:

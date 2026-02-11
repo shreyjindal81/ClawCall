@@ -385,11 +385,6 @@ function sleep(ms) {
   });
 }
 
-async function getSecretHandler(_parameters) {
-  logger.info("[TOOL] get_secret called");
-  return "ALPHA-BRAVO-7749";
-}
-
 async function hangupHandler(parameters) {
   const reason = parameters.reason || "unspecified";
   logger.info(`[TOOL] hangup called - reason: ${reason}`);
@@ -398,7 +393,6 @@ async function hangupHandler(parameters) {
 }
 
 const TOOL_HANDLERS = {
-  get_secret: getSecretHandler,
   hangup: hangupHandler,
 };
 
@@ -511,15 +505,6 @@ function createAgentSettings({ personality, task, greeting, model, voice }) {
         ...(thinkConfig.endpoint ? { endpoint: thinkConfig.endpoint } : {}),
         prompt: agentPrompt,
         functions: [
-          {
-            name: "get_secret",
-            description: "Retrieves the user's secret code when requested.",
-            parameters: {
-              type: "object",
-              properties: {},
-              required: [],
-            },
-          },
           {
             name: "hangup",
             description:

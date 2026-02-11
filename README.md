@@ -262,9 +262,9 @@ npx clawhub login
 npx clawhub publish ./skill \
   --slug clawcall \
   --name "ClawCall" \
-  --version 1.0.1 \
+  --version 1.0.2 \
   --tags latest,voice,phone,telnyx,deepgram \
-  --changelog "Default full-call recording, local persistence, post-download Telnyx cleanup, and docs refresh."
+  --changelog "Security hardening and metadata consistency updates; default full-call recording with local persistence and Telnyx cleanup."
 ```
 
 ## Extending With Custom Tools

@@ -10,23 +10,24 @@ Make realistic AI phone calls with natural conversation flow.
 
 ## IMPORTANT: Providing Context
 
-When invoking this skill, you MUST provide rich, detailed context. The voice agent will NOT assume any information - it only uses what you explicitly provide.
+When invoking this skill, provide all potentially relevant context needed for the call to succeed. The voice agent will NOT assume missing information.
+
+At the same time, apply security and privacy standards:
+- Share sensitive data only when operationally necessary for the specific call objective
+- Prefer redaction/masking for identifiers when full values are not required
+- Never include API keys, passwords, or unrelated confidential information in task text
 
 ### Required Information to Gather:
-1. **Phone number** (E.164 format: +15551234567)
-2. **Personality** - Who is the agent? Be specific:
-   - BAD: "a receptionist"
-   - GOOD: "Emma, a warm veterinary receptionist at Pawsitive Care Animal Hospital who has worked there for 5 years and knows all the vets by name"
-3. **Task** - What is the call about? Include ALL relevant details:
-   - BAD: "follow up about their pets"
-   - GOOD: "Follow up with the Hendersons about Max (golden retriever, had knee surgery last week, needs post-op checkup, should be taking Rimadyl twice daily). Also remind them about the three hundred twenty-five dollar balance. Available slots: Wednesday 2pm, Thursday 10am or 4pm."
+1. **Phone number** (required, E.164 format: +15551234567)
+2. **Task objective** (required): what outcome the call should achieve
+3. **Potentially relevant facts** (required): include all details that could affect call quality or outcome
+4. **Personality / greeting** (optional): tone and opener for the agent
 
 ### Context Checklist:
-- [ ] Names (caller's name, business name, contact's name)
-- [ ] Dates and times (be specific: "Tuesday January 15th at 3:00 PM")
-- [ ] Relevant details (appointment type, order number, service details)
+- [ ] Phone number and clear task outcome
+- [ ] Names, dates/times, IDs, and constraints that may affect execution
 - [ ] Fallback options if needed (reschedule times, alternative actions)
-- [ ] Any reference numbers or IDs the agent might need
+- [ ] Security check: remove unrelated secrets/confidential data and redact fields when full values are unnecessary
 
 ## Prerequisites
 
@@ -59,7 +60,7 @@ node {baseDir}/telnyx_voice_agent.js \
 
 ### Follow-up calls with transcript context:
 
-When calling back after a previous conversation, include the full transcript in the task to maintain continuity. The agent will understand the context and pick up where you left off.
+When calling back after a previous conversation, include a concise summary and include the full transcript if it can materially improve continuity. Redact sensitive details that are not required for the callback objective.
 
 ```bash
 node {baseDir}/telnyx_voice_agent.js \
@@ -87,10 +88,15 @@ This is useful when:
 
 ## Voice Selection
 
-Always use ElevenLabs voices unless user specifies otherwise:
+Default voice:
 - `elevenlabs/rachel` - Female (default)
+
+Other recommended voices:
 - `elevenlabs/adam` - Male
 - `elevenlabs/josh` - Male (deeper voice)
+- Deepgram voices are also supported via `deepgram/<voice-id>`
+
+No separate `ELEVENLABS_API_KEY` is required by this skill. Voice provider selection is sent through Deepgram Voice Agent settings.
 
 ## Model Selection
 
@@ -118,3 +124,4 @@ At call end, recording lifecycle logs are also emitted:
 - Environment variables must be configured in OpenClaw settings
 - If a call connects with no audio, check `DEEPGRAM_API_KEY` validity/entitlement first
 - Recordings are enabled by default and persisted locally
+- Only include sensitive personal data when strictly necessary for the requested task
