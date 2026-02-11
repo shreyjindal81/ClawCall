@@ -24,6 +24,7 @@ npm-debug.log*
 # Logs
 *.log
 /tmp/
+recordings/
 
 # OS
 .DS_Store

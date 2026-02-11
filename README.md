@@ -1,190 +1,242 @@
 # Telnyx Voice Agent
 
-AI-powered phone agent using Deepgram Voice Agent API and Telnyx for telephony.
+Production-style AI phone calls with real PSTN delivery.
 
-## Features
+This project bridges Telnyx media streams to Deepgram Voice Agent and gives you a CLI for outbound and server-only calling workflows. It is designed for practical outreach use cases: confirmations, follow-ups, reminders, callbacks, and scripted operations calls.
 
-- **Outbound calls**: Make AI-powered calls that exit cleanly when complete
-- **Voice AI**: Deepgram Voice Agent API (STT + LLM + TTS in one)
-- **Multiple LLMs**: Choose from Anthropic (Claude) or OpenAI (GPT) models
-- **Barge-in**: Interrupt the agent mid-speech (instant response)
-- **Instant hangup**: Call ends immediately when hangup tool is triggered
-- **Tool support**: Client-side function execution (e.g., hangup, custom tools)
-- **Customizable**: Pass personality, task, greeting, voice, and LLM model via CLI
-- **Built-in ngrok**: Automatic tunnel setup with `--ngrok` flag
-- **Local recordings by default**: Full call recordings are downloaded and saved on disk
-- **Portal cleanup by default**: Telnyx recordings are deleted after successful local download
+## Why This Is Useful
 
-## Requirements
+- Real phone calls over Telnyx, not browser-only demos
+- Deepgram handles STT + LLM + TTS in one realtime pipeline
+- Interruptible conversations (barge-in) that feel natural
+- Full-call recording enabled by default
+- Recording is downloaded locally, then deleted from Telnyx automatically
+- Clear terminal trace of the full interaction (`User: ...`, `Agent: ...`, lifecycle logs)
 
-- Node.js 18+
-- Telnyx account with a phone number and TeXML application
-- Deepgram account with Voice Agent API access
-- Verified ngrok account + `NGROK_AUTH_TOKEN` if using `--ngrok`
+## What Happens On Each Call
 
-## Setup
+1. Call is created through Telnyx with recording from answer enabled.
+2. Telnyx streams call audio to `/telnyx` WebSocket on this server.
+3. Audio is bridged to Deepgram Voice Agent and responses are streamed back.
+4. On call end, recording URL is resolved.
+5. Recording is saved to `RECORDINGS_DIR` (default `./recordings`).
+6. Remote recording is deleted from Telnyx after successful local save.
 
-1. Install dependencies:
+## Quick Start (5 Minutes)
+
+### 1. Install
+
 ```bash
 npm install
-```
-
-2. Copy `.env.example` to `.env` and fill in your credentials:
-```bash
 cp .env.example .env
 ```
 
-3. Configure Telnyx:
-   - Create a TeXML application in the Telnyx portal
-   - Set the webhook URL to your ngrok endpoint (e.g., `https://your-domain.ngrok-free.dev/webhook`)
-   - Enable bidirectional streaming
-   - Note your Connection ID
+### 2. Fill required env vars in `.env`
 
-4. (Optional) Set up ngrok auth token for `--ngrok` flag:
+- `TELNYX_API_KEY`
+- `TELNYX_CONNECTION_ID`
+- `TELNYX_PHONE_NUMBER`
+- `DEEPGRAM_API_KEY`
+
+Optional:
+- `NGROK_AUTH_TOKEN` (if using `--ngrok`)
+- `PUBLIC_WS_URL` (if not using `--ngrok`)
+- `RECORDINGS_DIR` (defaults to `./recordings`)
+
+### 3. Configure Telnyx TeXML application
+
+- Set webhook URL to `https://<your-domain>/webhook`
+- Enable bidirectional streaming
+- Use this app connection as `TELNYX_CONNECTION_ID`
+
+If using local development, easiest path is `--ngrok` and let this script create the tunnel.
+
+### 4. Place a test call
+
 ```bash
-# Add to .env or export directly
-export NGROK_AUTH_TOKEN=your_ngrok_auth_token
+node telnyx_voice_agent.js --to "+1234567890" --ngrok \
+  --task "Quick test call. Confirm audio is clear, then end politely."
 ```
 
-If you are not using `--ngrok`, set `PUBLIC_WS_URL` in `.env` to a reachable WSS URL for `/telnyx`.
+## Cost Analysis (As of February 11, 2026)
 
-## Usage
+### 1) Deepgram
 
-### Make an outbound call (exits when call ends):
+- Signup includes **$200 free credit**.
+- After free credit, this project is billed under Deepgram usage pricing.
+- Voice Agent API PAYG list pricing includes tiers that start at **$0.0500/min** and Standard at **$0.0800/min** (depends on configuration/tier).
+- Deepgram states Voice Agent pricing is based on websocket connection time.
+
+Practical note for this repo:
+- Budget for roughly **$0.05-$0.08 per call minute** for Deepgram usage depending on your selected tier/config.
+
+### 2) Telnyx
+
+- Voice API pricing shows a **$0.002/min Voice API fee** for outbound/inbound, plus SIP trunking charges.
+- Telnyx notes TeXML uses the same **$0.002/min** Voice API fee.
+- SIP trunking PAYG reference rates start around:
+  - **$0.005/min outbound local**
+  - **$0.0035/min inbound local**
+  - **$0.015/min inbound toll-free**
+- This repo also uses priced Telnyx optional features:
+  - **Media Streaming over WebSockets: $0.0035/min**
+  - **Call recording: $0.002/min**
+- Phone number rental starts at about **$1/month** for local/toll-free numbers.
+
+Practical note for this repo:
+- A common US local outbound Telnyx subtotal for this exact setup is around **$0.0125/min** (`$0.002 Voice API + $0.005 SIP + $0.0035 media streaming + $0.002 recording`), before taxes/fees and destination-specific adjustments.
+- Combined with Deepgram, total blended cost is often around **$0.0625-$0.0925/min** depending on Deepgram Voice Agent tier.
+
+Pricing references:
+- Deepgram pricing: <https://deepgram.com/pricing>
+- Telnyx Voice API pricing: <https://telnyx.com/pricing/voice-api/>
+- Telnyx SIP trunking pricing: <https://telnyx.com/pricing/elastic-sip/mc>
+- Telnyx numbers pricing: <https://telnyx.com/pricing/numbers>
+
+## Usage Recipes
+
+### Basic outbound call
+
 ```bash
 node telnyx_voice_agent.js --to "+1234567890" --ngrok
 ```
 
-### Custom agent persona:
+### High-context production call
+
 ```bash
 node telnyx_voice_agent.js --to "+1234567890" --ngrok \
-  --personality "You are a helpful assistant for Acme Corp..." \
-  --task "Follow up with Morgan about order three seven one nine and confirm delivery window."
+  --personality "Maya, a calm and professional clinic coordinator at Lakeside Health." \
+  --task "Confirm tomorrow's appointment for Jordan Lee at two thirty PM, verify callback number, and offer reschedule slots if needed." \
+  --greeting "Hi, this is Maya from Lakeside Health. Is now a good time for a quick appointment confirmation?"
 ```
 
-### Use a different LLM model:
+### Choose model and voice
+
 ```bash
-# Use OpenAI GPT-4o-mini (default)
-node telnyx_voice_agent.js --to "+1234567890" --ngrok --model "gpt-4o-mini"
-
-# Use Claude Sonnet 4
-node telnyx_voice_agent.js --to "+1234567890" --ngrok --model "claude-sonnet-4-20250514"
+node telnyx_voice_agent.js --to "+1234567890" --ngrok \
+  --model "claude-sonnet-4-20250514" \
+  --voice "elevenlabs/rachel"
 ```
 
-### Debug mode:
+### Debug mode
+
 ```bash
 node telnyx_voice_agent.js --to "+1234567890" --ngrok --debug
 ```
 
-### Server-only mode (stays running for multiple/inbound calls):
+### Server-only mode (inbound or multi-call runtime)
+
 ```bash
 node telnyx_voice_agent.js --server-only --ngrok
 ```
 
-### With custom ngrok domain (paid plan):
+### Custom ngrok domain
+
 ```bash
 node telnyx_voice_agent.js --to "+1234567890" --ngrok --ngrok-domain your-domain.ngrok-free.dev
 ```
 
-## Architecture
+## Recording Behavior (Default)
 
-```
-┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│    Phone     │◄───►│    Telnyx    │◄───►│  This Server │
-│   (mulaw)    │     │   (WebSocket)│     │ (Node.js/ws) │
-└──────────────┘     └──────────────┘     └──────┬───────┘
-                                                  │
-                                           Event-driven bridge
-                                                  │
-                                           ┌──────▼───────┐
-                                           │   Deepgram   │
-                                           │ Voice Agent  │
-                                           │  (linear16)  │
-                                           └──────────────┘
-```
+- Recording starts from answer (`record-from-answer`)
+- Terminal prints recording URL when available
+- Recording file is persisted locally
+- Remote recording is deleted from Telnyx after successful local download
 
-- **Telnyx**: Handles phone connectivity, sends/receives mulaw 8kHz audio
-- **Node.js + ws**: WebSocket server bridging Telnyx and Deepgram
-- **Deepgram Voice Agent**: All-in-one STT + LLM + TTS (configurable model)
-- **@ngrok/ngrok**: Built-in tunnel management for `--ngrok`
+Expected end-of-call logs:
 
-## Supported LLM Models
-
-Use `--model` to select the LLM (managed by Deepgram):
-
-| Provider | Models |
-|----------|--------|
-| **Anthropic** | claude-3-5-haiku-latest, claude-sonnet-4-20250514 |
-| **OpenAI** | gpt-4o-mini (default), gpt-5.1-chat-latest, gpt-5.1, gpt-5, gpt-5-mini, gpt-5-nano, gpt-4.1, gpt-4.1-mini, gpt-4.1-nano, gpt-4o |
-
-Run `node telnyx_voice_agent.js --help` to see all available models.
+- `[Recording] Download URL: ...`
+- `[Recording] Saved locally: ...`
+- `[Recording] Deleted from Telnyx: ...`
 
 ## Environment Variables
 
-| Variable | Description |
-|----------|-------------|
-| `TELNYX_API_KEY` | Telnyx API key |
-| `TELNYX_CONNECTION_ID` | TeXML application connection ID |
-| `TELNYX_PHONE_NUMBER` | Your Telnyx phone number |
-| `DEEPGRAM_API_KEY` | Deepgram API key |
-| `PUBLIC_WS_URL` | Public WebSocket URL (used if not using --ngrok) |
-| `SERVER_HOST` | Server host (default: 0.0.0.0) |
-| `SERVER_PORT` | Server port (default: 8765) |
-| `RECORDINGS_DIR` | Local folder to store downloaded call recordings (default: `./recordings`) |
-| `NGROK_AUTH_TOKEN` | ngrok auth token (optional, for --ngrok flag) |
+| Variable | Required | Description |
+|---|---|---|
+| `TELNYX_API_KEY` | Yes | Telnyx API key |
+| `TELNYX_CONNECTION_ID` | Yes | TeXML app connection ID |
+| `TELNYX_PHONE_NUMBER` | Yes | Caller number |
+| `DEEPGRAM_API_KEY` | Yes | Deepgram API key with Voice Agent access |
+| `PUBLIC_WS_URL` | No | Public WSS URL to `/telnyx` if not using `--ngrok` |
+| `SERVER_HOST` | No | Bind host (default `0.0.0.0`) |
+| `SERVER_PORT` | No | Bind port (default `8765`) |
+| `RECORDINGS_DIR` | No | Local recording output dir (default `./recordings`) |
+| `NGROK_AUTH_TOKEN` | No | Needed for `--ngrok` |
+
+## Supported Models
+
+Use `--model`:
+
+- Anthropic: `claude-3-5-haiku-latest`, `claude-sonnet-4-20250514`
+- OpenAI: `gpt-5.1-chat-latest`, `gpt-5.1`, `gpt-5`, `gpt-5-mini`, `gpt-5-nano`, `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano`, `gpt-4o`, `gpt-4o-mini` (default)
+
+Run `node telnyx_voice_agent.js --help` for current model and voice lists.
+
+## Architecture
+
+```text
+Phone <-> Telnyx (mulaw 8kHz) <-> Node.js/ws bridge <-> Deepgram Voice Agent (linear16)
+```
+
+Core components:
+
+- `CallSession`: per-call state
+- `SessionManager`: session lifecycle
+- `CallManager`: dial/hangup/recording retrieval/local save/Telnyx deletion
+- `/telnyx`: media WebSocket endpoint
+- `/webhook`: Telnyx event receiver
 
 ## Troubleshooting
 
-- **Call rings but no audio**:
-  - Verify `DEEPGRAM_API_KEY` is valid and has Voice Agent access.
-  - Run with `--debug` and check for Deepgram `401` errors.
-- **ngrok fails to start**:
-  - Ensure `NGROK_AUTH_TOKEN` is set.
-  - Ensure your ngrok account is verified.
-- **Port bind error (`EADDRINUSE`/`EPERM`)**:
-  - Change `SERVER_PORT` (for example `SERVER_PORT=8788`).
-- **Recording URL appears but file is not saved locally**:
-  - Ensure `RECORDINGS_DIR` is writable.
-  - Ensure the process has network access to download the recording URL.
+### Call connects but no audio
 
-## ClawHub Prep
+- Use `--debug` and check for Deepgram auth errors.
+- Verify `DEEPGRAM_API_KEY` has Voice Agent access.
+- Ensure `PUBLIC_WS_URL` or ngrok URL points to a live instance of this process.
 
-Manual publish workflow (recommended):
+### `EADDRINUSE` or bind failures
 
-1. Validate package locally:
+- Set a different port:
+
+```bash
+SERVER_PORT=8788 node telnyx_voice_agent.js --to "+1234567890" --ngrok
+```
+
+### Recording URL appears but no local file
+
+- Check `RECORDINGS_DIR` is writable.
+- Verify network access from runtime to recording URL.
+
+### Local save works but Telnyx deletion fails
+
+- Confirm `TELNYX_API_KEY` permissions allow deleting recordings.
+- Check post-call warning/error logs for the recording ID and API response.
+
+## Publish To ClawHub
+
+1. Validate:
+
 ```bash
 npm run check
 ```
-2. Ensure `SKILL.md` metadata and commands match current behavior.
-3. Login once:
+
+2. Login:
+
 ```bash
 npx clawhub login
 ```
-4. Publish manually with explicit version/tags:
+
+3. Publish:
+
 ```bash
 npx clawhub publish . \
   --slug telnyx-voice-agent \
   --name "Telnyx Voice Agent" \
-  --version 1.0.0 \
+  --version 1.0.1 \
   --tags latest,voice,phone,telnyx,deepgram \
-  --changelog "Initial JavaScript release with Telnyx + Deepgram voice calling."
+  --changelog "Default full-call recording, local persistence, post-download Telnyx cleanup, and docs refresh."
 ```
 
-Notes:
-- This project is prepared for manual publish; it does not auto-publish.
-- Bump `--version` and changelog text for each new release.
+## Extending With Custom Tools
 
-## Adding Custom Tools
-
-Edit `TOOL_HANDLERS` and `createAgentSettings()` in `telnyx_voice_agent.js`:
-
-```js
-async function myToolHandler(parameters) {
-  // Your logic here
-  return "Result";
-}
-
-TOOL_HANDLERS.my_tool = myToolHandler;
-```
-
-Then add the function definition in `createAgentSettings()`.
+Add handlers in `TOOL_HANDLERS` and define matching function schemas in `createAgentSettings()` inside `telnyx_voice_agent.js`.
