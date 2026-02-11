@@ -646,6 +646,7 @@ def start_ngrok(port: int, domain: str = None) -> str:
 | `PUBLIC_WS_URL` | No* | WebSocket URL (not needed with --ngrok) |
 | `SERVER_HOST` | No | Server host (default: 0.0.0.0) |
 | `SERVER_PORT` | No | Server port (default: 8765) |
+| `RECORDINGS_DIR` | No | Local recordings folder (default: `./recordings`) |
 | `NGROK_AUTH_TOKEN` | No | ngrok auth token for --ngrok flag |
 
 ### Config Class
@@ -704,13 +705,22 @@ When making outbound calls (without `--server-only`), the script exits cleanly a
 Call ends (hangup or disconnect)
         │
         ▼
-Session closed in finally block
+Session closed in cleanup
         │
         ▼
-shutdown_event.set()  ──────────►  run_server_and_call() wakes up
+Wait for recording URL / metadata
+        │
+        ▼
+Download recording to local disk
+        │
+        ▼
+Delete recording from Telnyx
+        │
+        ▼
+shutdown signal set  ──────────►  run_server_and_call() wakes up
                                            │
                                            ▼
-                                   server.should_exit = True
+                                   server shutdown starts
                                            │
                                            ▼
                                    ngrok tunnel closed
@@ -748,7 +758,10 @@ python telnyx_voice_agent.py --server-only --ngrok --debug
 | `Agent: ...` | Agent response transcription |
 | `[Barge-in] Cleared N chunks + sent clear to Telnyx` | Barge-in processed |
 | `[TOOL] get_secret called` | Tool was invoked |
-| `[Hangup] Executing hangup immediately` | Hangup triggered, call ending |
+| `[TOOL] hangup called` | Hangup triggered |
+| `[Recording] Download URL: ...` | Recording URL resolved |
+| `[Recording] Saved locally: ...` | Local recording persisted |
+| `[Recording] Deleted from Telnyx: ...` | Remote recording cleanup complete |
 | `[Server] Call ended, shutting down...` | Clean shutdown initiated |
 | `[Server] Shutdown signal received` | Server stopping |
 
@@ -761,6 +774,8 @@ python telnyx_voice_agent.py --server-only --ngrok --debug
 | Barge-in slow | Missing `clear` event | Ensure `handle_barge_in()` sends clear |
 | Call doesn't connect | Wrong WebSocket URL | Verify `PUBLIC_WS_URL` or use `--ngrok` |
 | ngrok error | Missing auth token | Set `NGROK_AUTH_TOKEN` in .env |
+| Recording not saved locally | Folder or permissions issue | Set writable `RECORDINGS_DIR` |
+| Recording not deleted on Telnyx | Missing/late recording ID | Check post-call logs for cleanup warnings |
 
 ### Testing Locally
 

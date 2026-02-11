@@ -103,6 +103,13 @@ The call transcript will be returned, containing the full conversation. Use this
 - Extract information gathered during the call
 - Report back to the user
 
+You must return the full call transcript to the user after the call ends.
+
+At call end, recording lifecycle logs are also emitted:
+- Recording URL discovered
+- Recording saved to local disk (`RECORDINGS_DIR`, default `./recordings`)
+- Recording deleted from the Telnyx portal after successful local save
+
 ## Notes
 
 - The agent will NEVER assume information not provided
@@ -110,3 +117,4 @@ The call transcript will be returned, containing the full conversation. Use this
 - ngrok tunnel is automatically managed
 - Environment variables must be configured in OpenClaw settings
 - If a call connects with no audio, check `DEEPGRAM_API_KEY` validity/entitlement first
+- Recordings are enabled by default and persisted locally

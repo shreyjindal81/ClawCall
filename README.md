@@ -12,6 +12,8 @@ AI-powered phone agent using Deepgram Voice Agent API and Telnyx for telephony.
 - **Tool support**: Client-side function execution (e.g., hangup, custom tools)
 - **Customizable**: Pass personality, task, greeting, voice, and LLM model via CLI
 - **Built-in ngrok**: Automatic tunnel setup with `--ngrok` flag
+- **Local recordings by default**: Full call recordings are downloaded and saved on disk
+- **Portal cleanup by default**: Telnyx recordings are deleted after successful local download
 
 ## Requirements
 
@@ -128,6 +130,7 @@ Run `node telnyx_voice_agent.js --help` to see all available models.
 | `PUBLIC_WS_URL` | Public WebSocket URL (used if not using --ngrok) |
 | `SERVER_HOST` | Server host (default: 0.0.0.0) |
 | `SERVER_PORT` | Server port (default: 8765) |
+| `RECORDINGS_DIR` | Local folder to store downloaded call recordings (default: `./recordings`) |
 | `NGROK_AUTH_TOKEN` | ngrok auth token (optional, for --ngrok flag) |
 
 ## Troubleshooting
@@ -140,6 +143,9 @@ Run `node telnyx_voice_agent.js --help` to see all available models.
   - Ensure your ngrok account is verified.
 - **Port bind error (`EADDRINUSE`/`EPERM`)**:
   - Change `SERVER_PORT` (for example `SERVER_PORT=8788`).
+- **Recording URL appears but file is not saved locally**:
+  - Ensure `RECORDINGS_DIR` is writable.
+  - Ensure the process has network access to download the recording URL.
 
 ## ClawHub Prep
 

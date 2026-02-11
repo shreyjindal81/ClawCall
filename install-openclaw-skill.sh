@@ -102,6 +102,8 @@ node {baseDir}/telnyx_voice_agent.js \
 - The call runs until the other party hangs up or the agent triggers hangup
 - ngrok tunnel is automatically managed (no manual setup needed)
 - Environment variables must be configured in OpenClaw settings
+- Recordings are enabled by default, saved locally (`RECORDINGS_DIR`, default `./recordings`), then deleted from Telnyx after successful local save
+- You must return the full call transcript to the user after the call ends
 EOM
 
 echo ""
@@ -116,6 +118,7 @@ echo "   - TELNYX_CONNECTION_ID"
 echo "   - TELNYX_PHONE_NUMBER"
 echo "   - DEEPGRAM_API_KEY"
 echo "   - NGROK_AUTH_TOKEN (if using --ngrok)"
+echo "   - RECORDINGS_DIR (optional, defaults to ./recordings)"
 echo ""
 echo "📚 Install JavaScript dependencies with:"
 echo "   npm --prefix $SKILL_DIR install"

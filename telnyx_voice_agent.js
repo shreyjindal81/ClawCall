@@ -7,6 +7,8 @@
  */
 
 const http = require("node:http");
+const fs = require("node:fs/promises");
+const path = require("node:path");
 const process = require("node:process");
 
 const dotenv = require("dotenv");
@@ -195,6 +197,7 @@ class Config {
     this.publicWsUrl = process.env.PUBLIC_WS_URL || "";
     this.serverHost = process.env.SERVER_HOST || "0.0.0.0";
     this.serverPort = Number.parseInt(process.env.SERVER_PORT || "8765", 10);
+    this.recordingsDir = path.resolve(process.env.RECORDINGS_DIR || path.join(process.cwd(), "recordings"));
 
     this.agentPersonality = personality || null;
     this.agentTask = task || null;
@@ -635,6 +638,20 @@ class SessionManager {
 class CallManager {
   constructor(appConfig) {
     this.config = appConfig;
+    this.recordingStartRequested = new Set();
+    this.recordingUrlByCallControlId = new Map();
+    this.recordingIdByCallControlId = new Map();
+    this.deletedRecordingIds = new Set();
+    this.recordingWaitersByCallControlId = new Map();
+    this.recordingPersistPromisesByCallControlId = new Map();
+    this.localRecordingPathByCallControlId = new Map();
+  }
+
+  getAuthHeaders() {
+    return {
+      Authorization: `Bearer ${this.config.telnyxApiKey}`,
+      "Content-Type": "application/json",
+    };
   }
 
   async initiateCall(toNumber, fromNumber = null) {
@@ -644,14 +661,12 @@ class CallManager {
 
     const response = await fetch("https://api.telnyx.com/v2/calls", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${this.config.telnyxApiKey}`,
-        "Content-Type": "application/json",
-      },
+      headers: this.getAuthHeaders(),
       body: JSON.stringify({
         connection_id: this.config.telnyxConnectionId,
         to: toNumber,
         from,
+        record: "record-from-answer",
         stream_url: this.config.publicWsUrl,
         stream_track: "both_tracks",
         stream_bidirectional_mode: "rtp",
@@ -667,6 +682,10 @@ class CallManager {
 
     const responseBody = await response.json();
     const callControlId = responseBody?.data?.call_control_id || "";
+    if (callControlId) {
+      // Outbound calls are auto-recorded from answer; avoid issuing a duplicate record_start.
+      this.recordingStartRequested.add(callControlId);
+    }
 
     logger.info(`[Telnyx] Call initiated: ${callControlId}`);
 
@@ -684,10 +703,7 @@ class CallManager {
         `https://api.telnyx.com/v2/calls/${encodeURIComponent(callControlId)}/actions/hangup`,
         {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${this.config.telnyxApiKey}`,
-            "Content-Type": "application/json",
-          },
+          headers: this.getAuthHeaders(),
           body: JSON.stringify({}),
         },
       );
@@ -699,6 +715,440 @@ class CallManager {
     } catch (error) {
       logger.error(`[Telnyx] Hangup error: ${error.message}`);
     }
+  }
+
+  extractRecordingUrl(payload) {
+    const candidates = [
+      payload?.recording_urls?.mp3,
+      payload?.recording_urls?.wav,
+      payload?.public_recording_urls?.mp3,
+      payload?.public_recording_urls?.wav,
+      payload?.download_urls?.mp3,
+      payload?.download_urls?.wav,
+      payload?.url,
+    ];
+
+    for (const candidate of candidates) {
+      if (typeof candidate === "string" && candidate.length > 0) {
+        return candidate;
+      }
+    }
+
+    return null;
+  }
+
+  extractRecordingId(payload) {
+    if (typeof payload?.recording_id === "string" && payload.recording_id.length > 0) {
+      return payload.recording_id;
+    }
+    if (typeof payload?.id === "string" && payload.id.length > 0) {
+      return payload.id;
+    }
+    return "";
+  }
+
+  setRecordingId(callControlId, recordingId) {
+    if (!callControlId || !recordingId) {
+      return;
+    }
+    this.recordingIdByCallControlId.set(callControlId, recordingId);
+  }
+
+  setRecordingUrl(callControlId, recordingUrl) {
+    if (!callControlId || !recordingUrl) {
+      return;
+    }
+
+    this.recordingUrlByCallControlId.set(callControlId, recordingUrl);
+    logger.info(`[Recording] Saved recording URL for ${callControlId}`);
+
+    const waiters = this.recordingWaitersByCallControlId.get(callControlId) || [];
+    for (const resolve of waiters) {
+      resolve(recordingUrl);
+    }
+    this.recordingWaitersByCallControlId.delete(callControlId);
+  }
+
+  async startRecording(callControlId) {
+    if (!callControlId || this.recordingStartRequested.has(callControlId)) {
+      return;
+    }
+
+    this.recordingStartRequested.add(callControlId);
+    logger.info(`[Recording] Starting recording for ${callControlId}`);
+
+    try {
+      const response = await fetch(
+        `https://api.telnyx.com/v2/calls/${encodeURIComponent(callControlId)}/actions/record_start`,
+        {
+          method: "POST",
+          headers: this.getAuthHeaders(),
+          body: JSON.stringify({
+            format: "mp3",
+            channels: "dual",
+            recording_track: "both",
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        const bodyText = await response.text();
+        throw new Error(`Telnyx record_start failed (${response.status}): ${bodyText}`);
+      }
+
+      logger.info(`[Recording] Recording enabled for ${callControlId}`);
+    } catch (error) {
+      this.recordingStartRequested.delete(callControlId);
+      logger.error(`[Recording] Failed to start recording for ${callControlId}: ${error.message}`);
+    }
+  }
+
+  async fetchRecordingUrlById(callControlId, recordingId) {
+    if (!recordingId) {
+      return null;
+    }
+
+    try {
+      const response = await fetch(`https://api.telnyx.com/v2/recordings/${encodeURIComponent(recordingId)}`, {
+        method: "GET",
+        headers: this.getAuthHeaders(),
+      });
+
+      if (!response.ok) {
+        const bodyText = await response.text();
+        throw new Error(`Telnyx recording fetch failed (${response.status}): ${bodyText}`);
+      }
+
+      const responseBody = await response.json();
+      const recordingData = responseBody?.data || {};
+      const recordingUrl = this.extractRecordingUrl(recordingData);
+      const resolvedCallControlId = callControlId || recordingData.call_control_id || "";
+      const resolvedRecordingId = this.extractRecordingId(recordingData);
+
+      if (resolvedCallControlId && resolvedRecordingId) {
+        this.setRecordingId(resolvedCallControlId, resolvedRecordingId);
+      }
+
+      if (recordingUrl && resolvedCallControlId) {
+        this.setRecordingUrl(resolvedCallControlId, recordingUrl);
+      }
+
+      return recordingUrl;
+    } catch (error) {
+      logger.error(`[Recording] Failed to fetch recording ${recordingId}: ${error.message}`);
+      return null;
+    }
+  }
+
+  async fetchRecordingByCallControlId(callControlId) {
+    if (!callControlId) {
+      return null;
+    }
+
+    const executeListRequest = async (queryParams, suppressErrorLogs = false) => {
+      try {
+        const query = queryParams.toString();
+        const url = query ? `https://api.telnyx.com/v2/recordings?${query}` : "https://api.telnyx.com/v2/recordings";
+        const response = await fetch(url, {
+          method: "GET",
+          headers: this.getAuthHeaders(),
+        });
+
+        if (!response.ok) {
+          const bodyText = await response.text();
+          if (!suppressErrorLogs) {
+            logger.warn(`[Recording] Recording list lookup failed (${response.status}): ${bodyText}`);
+          }
+          return [];
+        }
+
+        const responseBody = await response.json();
+        return Array.isArray(responseBody?.data) ? responseBody.data : [];
+      } catch (error) {
+        if (!suppressErrorLogs) {
+          logger.warn(`[Recording] Recording list lookup error: ${error.message}`);
+        }
+        return [];
+      }
+    };
+
+    const filteredParams = new URLSearchParams({
+      "page[size]": "25",
+      "filter[call_control_id]": callControlId,
+    });
+    let recordings = await executeListRequest(filteredParams, true);
+
+    if (!recordings.some((recording) => recording?.call_control_id === callControlId)) {
+      const fallbackParams = new URLSearchParams({
+        "page[size]": "25",
+      });
+      recordings = await executeListRequest(fallbackParams, false);
+    }
+
+    const recording = recordings.find((item) => item?.call_control_id === callControlId);
+    if (!recording) {
+      return null;
+    }
+
+    const recordingId = this.extractRecordingId(recording);
+    if (recordingId) {
+      this.setRecordingId(callControlId, recordingId);
+    }
+
+    const recordingUrl = this.extractRecordingUrl(recording);
+    if (recordingUrl) {
+      this.setRecordingUrl(callControlId, recordingUrl);
+    }
+
+    return recording;
+  }
+
+  async resolveRecordingIdForCall(callControlId) {
+    if (!callControlId) {
+      return "";
+    }
+
+    const knownRecordingId = this.recordingIdByCallControlId.get(callControlId);
+    if (knownRecordingId) {
+      return knownRecordingId;
+    }
+
+    await this.fetchRecordingByCallControlId(callControlId);
+    return this.recordingIdByCallControlId.get(callControlId) || "";
+  }
+
+  async deleteRecordingFromTelnyx(recordingId) {
+    if (!recordingId || this.deletedRecordingIds.has(recordingId)) {
+      return true;
+    }
+
+    try {
+      const response = await fetch(`https://api.telnyx.com/v2/recordings/${encodeURIComponent(recordingId)}`, {
+        method: "DELETE",
+        headers: this.getAuthHeaders(),
+      });
+
+      if (!response.ok) {
+        const bodyText = await response.text();
+        throw new Error(`Telnyx recording delete failed (${response.status}): ${bodyText}`);
+      }
+
+      this.deletedRecordingIds.add(recordingId);
+      return true;
+    } catch (error) {
+      logger.error(`[Recording] Failed to delete remote recording ${recordingId}: ${error.message}`);
+      return false;
+    }
+  }
+
+  onRecordingSaved(eventPayload) {
+    const callControlId = eventPayload?.call_control_id || "";
+    const recordingId = this.extractRecordingId(eventPayload);
+    const recordingUrl = this.extractRecordingUrl(eventPayload || {});
+
+    if (callControlId && recordingId) {
+      this.setRecordingId(callControlId, recordingId);
+    }
+
+    if (recordingUrl) {
+      this.setRecordingUrl(callControlId, recordingUrl);
+      return;
+    }
+
+    if (recordingId) {
+      void this.fetchRecordingUrlById(callControlId, recordingId);
+    }
+  }
+
+  waitForRecordingUrl(callControlId, timeoutMs = 15000) {
+    if (!callControlId) {
+      return Promise.resolve(null);
+    }
+
+    const existingUrl = this.recordingUrlByCallControlId.get(callControlId);
+    if (existingUrl) {
+      return Promise.resolve(existingUrl);
+    }
+
+    return new Promise((resolve) => {
+      const waiters = this.recordingWaitersByCallControlId.get(callControlId) || [];
+      const onReady = (url) => {
+        clearTimeout(timeout);
+        resolve(url);
+      };
+
+      const timeout = setTimeout(() => {
+        const updatedWaiters = (this.recordingWaitersByCallControlId.get(callControlId) || []).filter(
+          (waiter) => waiter !== onReady,
+        );
+        if (updatedWaiters.length > 0) {
+          this.recordingWaitersByCallControlId.set(callControlId, updatedWaiters);
+        } else {
+          this.recordingWaitersByCallControlId.delete(callControlId);
+        }
+        resolve(null);
+      }, timeoutMs);
+
+      waiters.push(onReady);
+      this.recordingWaitersByCallControlId.set(callControlId, waiters);
+    });
+  }
+
+  async waitForRecordingUrlWithFallback(callControlId, timeoutMs = 20000) {
+    if (!callControlId) {
+      return null;
+    }
+
+    const deadline = Date.now() + timeoutMs;
+
+    while (Date.now() < deadline) {
+      const existingUrl = this.recordingUrlByCallControlId.get(callControlId);
+      if (existingUrl) {
+        return existingUrl;
+      }
+
+      const knownRecordingId = this.recordingIdByCallControlId.get(callControlId);
+      if (knownRecordingId) {
+        const urlFromRecording = await this.fetchRecordingUrlById(callControlId, knownRecordingId);
+        if (urlFromRecording) {
+          return urlFromRecording;
+        }
+      } else {
+        await this.fetchRecordingByCallControlId(callControlId);
+        const discoveredUrl = this.recordingUrlByCallControlId.get(callControlId);
+        if (discoveredUrl) {
+          return discoveredUrl;
+        }
+      }
+
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) {
+        break;
+      }
+      await sleep(Math.min(2000, remainingMs));
+    }
+
+    return this.recordingUrlByCallControlId.get(callControlId) || null;
+  }
+
+  sanitizeCallControlId(callControlId) {
+    const safeValue = String(callControlId || "")
+      .replace(/[^a-zA-Z0-9_-]/g, "_")
+      .replace(/_+/g, "_")
+      .replace(/^_+|_+$/g, "");
+    return safeValue || "call";
+  }
+
+  inferRecordingExtension(recordingUrl, contentType = "") {
+    const type = contentType.toLowerCase();
+    if (type.includes("audio/wav") || type.includes("audio/x-wav")) {
+      return ".wav";
+    }
+    if (type.includes("audio/mpeg") || type.includes("audio/mp3")) {
+      return ".mp3";
+    }
+
+    try {
+      const pathname = new URL(recordingUrl).pathname || "";
+      const extension = path.extname(pathname).toLowerCase();
+      if (extension === ".wav" || extension === ".mp3") {
+        return extension;
+      }
+    } catch (_error) {
+      // Ignore malformed URLs and fall back to mp3.
+    }
+
+    return ".mp3";
+  }
+
+  async downloadRecordingToLocalFile(callControlId, recordingUrl) {
+    if (!recordingUrl || !/^https?:\/\//i.test(recordingUrl)) {
+      logger.warn(`[Recording] Unsupported recording URL for local download: ${recordingUrl}`);
+      return null;
+    }
+
+    try {
+      await fs.mkdir(this.config.recordingsDir, { recursive: true });
+
+      let response = await fetch(recordingUrl);
+      if (!response.ok) {
+        response = await fetch(recordingUrl, { headers: this.getAuthHeaders() });
+      }
+
+      if (!response.ok) {
+        const bodyText = await response.text();
+        throw new Error(`Recording download failed (${response.status}): ${bodyText}`);
+      }
+
+      const extension = this.inferRecordingExtension(recordingUrl, response.headers.get("content-type") || "");
+      const safeCallId = this.sanitizeCallControlId(callControlId);
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const localPath = path.join(this.config.recordingsDir, `${timestamp}_${safeCallId}${extension}`);
+      const audioBuffer = Buffer.from(await response.arrayBuffer());
+
+      await fs.writeFile(localPath, audioBuffer);
+      this.localRecordingPathByCallControlId.set(callControlId, localPath);
+
+      return localPath;
+    } catch (error) {
+      logger.error(`[Recording] Failed to save recording locally for ${callControlId}: ${error.message}`);
+      return null;
+    }
+  }
+
+  waitAndPersistRecording(callControlId, timeoutMs = 30000) {
+    if (!callControlId) {
+      return Promise.resolve(null);
+    }
+
+    const cachedPath = this.localRecordingPathByCallControlId.get(callControlId);
+    if (cachedPath) {
+      return Promise.resolve(cachedPath);
+    }
+
+    const existingPromise = this.recordingPersistPromisesByCallControlId.get(callControlId);
+    if (existingPromise) {
+      return existingPromise;
+    }
+
+    logger.info(`[Recording] Waiting for recording URL for ${callControlId}...`);
+
+    const persistPromise = this.waitForRecordingUrlWithFallback(callControlId, timeoutMs)
+      .then(async (recordingUrl) => {
+        if (recordingUrl) {
+          logger.info(`[Recording] Download URL: ${recordingUrl}`);
+          const localPath = await this.downloadRecordingToLocalFile(callControlId, recordingUrl);
+          if (localPath) {
+            logger.info(`[Recording] Saved locally: ${localPath}`);
+
+            const recordingId = await this.resolveRecordingIdForCall(callControlId);
+            if (recordingId) {
+              const deleted = await this.deleteRecordingFromTelnyx(recordingId);
+              if (deleted) {
+                logger.info(`[Recording] Deleted from Telnyx: ${recordingId}`);
+              } else {
+                logger.warn(`[Recording] Local copy saved, but failed to delete Telnyx recording: ${recordingId}`);
+              }
+            } else {
+              logger.warn(`[Recording] Local copy saved, but could not resolve Telnyx recording ID for cleanup.`);
+            }
+          } else {
+            logger.warn(`[Recording] Unable to save recording locally for ${callControlId}.`);
+          }
+          return localPath;
+        } else {
+          logger.warn(
+            `[Recording] URL not available before timeout for ${callControlId}. Check Telnyx recordings.`,
+          );
+          return null;
+        }
+      })
+      .finally(() => {
+        this.recordingPersistPromisesByCallControlId.delete(callControlId);
+      });
+
+    this.recordingPersistPromisesByCallControlId.set(callControlId, persistPromise);
+    return persistPromise;
   }
 }
 
@@ -936,6 +1386,14 @@ function initApp({ personality, task, greeting, model, voice, serverOnly }) {
 const app = express();
 app.use(express.json());
 
+function isRecordingSavedEvent(eventType) {
+  return (
+    eventType === "call.recording.saved" ||
+    eventType === "recording.saved" ||
+    eventType === "recording_saved"
+  );
+}
+
 app.post("/webhook", (req, res) => {
   try {
     const payload = req.body || {};
@@ -956,6 +1414,14 @@ app.post("/webhook", (req, res) => {
           logger.info(`[Webhook] Updated session ${streamId} with call_control_id: ${callControlId}`);
         }
       }
+
+      if (callManager && callControlId) {
+        void callManager.startRecording(callControlId);
+      }
+    }
+
+    if (isRecordingSavedEvent(eventType) && callManager) {
+      callManager.onRecordingSaved(eventPayload);
     }
 
     res.json({ status: "ok" });
@@ -984,9 +1450,15 @@ function createWebSocketServer() {
       }
       cleanedUp = true;
 
+      const endedCallControlId = session?.callControlId || "";
+
       if (session) {
         sessionManager.closeSession(session.streamId);
         session = null;
+      }
+
+      if (callManager && endedCallControlId) {
+        void callManager.waitAndPersistRecording(endedCallControlId, 30000);
       }
 
       if (!serverOnlyMode) {
@@ -1022,6 +1494,10 @@ function createWebSocketServer() {
 
         session = sessionManager.createSession(streamId, callControlId);
         startOutputAudioLoop(ws, session);
+
+        if (callManager && callControlId) {
+          void callManager.startRecording(callControlId);
+        }
         return;
       }
 
@@ -1322,6 +1798,7 @@ async function runServerAndCall(args) {
 
   logger.info(`Using model: ${config.agentModel} (${getProviderForModel(config.agentModel)})`);
   logger.info(`Using voice: ${config.agentVoice}`);
+  logger.info(`Recordings directory: ${config.recordingsDir}`);
 
   await startServer();
 
@@ -1338,8 +1815,11 @@ async function runServerAndCall(args) {
   logger.info(`Public URL: ${config.publicWsUrl}`);
 
   if (!args.serverOnly && args.to) {
+    let outboundCallControlId = "";
+
     try {
-      await callManager.initiateCall(args.to);
+      const call = await callManager.initiateCall(args.to);
+      outboundCallControlId = call.call_control_id || "";
       logger.info("Call initiated - waiting for call to complete...");
     } catch (error) {
       logger.error(`Call failed: ${error.message}`);
@@ -1348,6 +1828,10 @@ async function runServerAndCall(args) {
 
     await shutdownPromise;
     logger.info("[Server] Shutdown signal received");
+
+    if (outboundCallControlId) {
+      await callManager.waitAndPersistRecording(outboundCallControlId, 30000);
+    }
   } else {
     logger.info("Server running in server-only mode (press Ctrl+C to exit)");
     await new Promise((resolve) => {

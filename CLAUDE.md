@@ -7,6 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 AI-powered phone agent using Deepgram Voice Agent API (STT + LLM + TTS) and Telnyx for telephony. Single-file Node.js application that makes outbound calls with an AI voice agent.
 
 The script manages tunnels with `@ngrok/ngrok` when `--ngrok` is used.
+Call recordings are enabled by default, saved locally, then deleted from Telnyx after successful download.
 
 ## Commands
 
@@ -55,7 +56,7 @@ Phone ←→ Telnyx (mulaw 8kHz) ←→ Node.js/ws bridge ←→ Deepgram Voice 
 
 - `CallSession`: Per-call state including output queue, barge-in flags, and Deepgram socket
 - `SessionManager`: Creates/tracks/cleans up sessions
-- `CallManager`: Telnyx REST wrapper for outbound calls and hangup
+- `CallManager`: Telnyx REST wrapper for outbound calls, hangup, recording retrieval, local persistence, and Telnyx cleanup
 - `/telnyx` WebSocket: Bidirectional Telnyx media stream handler
 - `/webhook` HTTP endpoint: Telnyx webhook receiver
 - `TOOL_HANDLERS`: Function-call handlers (`get_secret`, `hangup`)
@@ -103,13 +104,14 @@ Default: `elevenlabs/rachel`
 
 Required: `TELNYX_API_KEY`, `TELNYX_CONNECTION_ID`, `TELNYX_PHONE_NUMBER`, `DEEPGRAM_API_KEY`
 
-Optional: `NGROK_AUTH_TOKEN` (for `--ngrok`), `PUBLIC_WS_URL` (if not using ngrok), `SERVER_HOST`, `SERVER_PORT`
+Optional: `NGROK_AUTH_TOKEN` (for `--ngrok`), `PUBLIC_WS_URL` (if not using ngrok), `SERVER_HOST`, `SERVER_PORT`, `RECORDINGS_DIR` (defaults to `./recordings`)
 
 ## Operational Notes
 
 - `--ngrok` requires a valid `NGROK_AUTH_TOKEN` and verified ngrok account.
 - If calls connect but there is no audio, check Deepgram auth first (`401` means bad key or missing access).
 - If port binding fails, set a different port (for example `SERVER_PORT=8788`).
+- On each completed call, expect recording logs in this order: URL discovered, local file saved, Telnyx recording deleted.
 
 ## ClawHub Release Notes
 
