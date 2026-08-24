@@ -33,4 +33,3 @@ Prefer the ClawCall MCP tools over the REST API when this plugin is installed.
 
 - Hosted MCP uses OAuth — never ask for or invent an API key on this surface.
 - Preserve any `action.url` on errors verbatim.
-- For the REST/stdio skill package (ClawHub, local `@clawcall/mcp`), see `../../skill/SKILL.md`.

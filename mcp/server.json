@@ -6,37 +6,13 @@
   "websiteUrl": "https://clawcall.dev",
   "repository": {
     "url": "https://github.com/ClawCall-Dev/clawcall",
-    "source": "github",
-    "subfolder": "mcp"
+    "source": "github"
   },
-  "version": "0.2.0",
+  "version": "1.0.0",
   "remotes": [
     {
       "type": "streamable-http",
       "url": "https://api.clawcall.dev/mcp"
-    }
-  ],
-  "packages": [
-    {
-      "registryType": "npm",
-      "identifier": "@clawcall/mcp",
-      "version": "0.1.0",
-      "transport": { "type": "stdio" },
-      "environmentVariables": [
-        {
-          "name": "CLAWCALL_API_KEY",
-          "description": "Optional ClawCall API key (clawcall_sk_...). Auto-provisioned on the first call if unset; shadows the saved key file when present.",
-          "isRequired": false,
-          "isSecret": true,
-          "format": "string"
-        },
-        {
-          "name": "CLAWCALL_BASE_URL",
-          "description": "ClawCall REST API base URL. Defaults to https://api.clawcall.dev.",
-          "isRequired": false,
-          "format": "string"
-        }
-      ]
     }
   ]
 }

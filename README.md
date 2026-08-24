@@ -4,7 +4,7 @@ Make real AI-powered phone calls from any AI agent. ClawCall dials the number, h
 
 **10 free minutes or 10 calls. No setup. No API keys to configure.**
 
-## Hosted remote MCP (recommended)
+## Hosted remote MCP
 
 Remote MCP URL: `https://api.clawcall.dev/mcp`
 
@@ -13,6 +13,10 @@ Auth: OAuth 2.1 (authorization code + PKCE). No API key on this surface.
 Add it as a custom / remote MCP connector in Cursor, ChatGPT, Claude, Cowork, Codex, or any host that supports Streamable HTTP MCP, then sign in to ClawCall when prompted.
 
 Cursor plugin (this repo): install from the Cursor Marketplace once listed, or import this repository as a team/local marketplace. The plugin ships `mcp.json` pointed at the hosted endpoint plus a calling skill.
+
+Official MCP registry: `io.github.ClawCall-Dev/clawcall`
+
+See [`mcp/README.md`](./mcp/README.md) for the hosted MCP surface.
 
 ## Install From ClawHub
 
@@ -24,20 +28,6 @@ Published skill: https://clawhub.ai/clawcall-dev/clawcall-dev
 
 Or manually, download the skill zip from ClawHub and add `SKILL.md` to your agent's skills directory.
 
-## Local stdio MCP Server
-
-Prefer a local process? [`mcp/`](./mcp) is a stdio MCP server (`@clawcall/mcp`) that exposes the
-same ClawCall REST API as tools for any MCP host (Claude Code, Claude Desktop, Cursor,
-Windsurf). It shares one identity and balance with the skill.
-
-```bash
-claude mcp add clawcall -- npx -y @clawcall/mcp
-```
-
-See [`mcp/README.md`](./mcp/README.md) for client config and the call workflow.
-
-Official MCP registry entry: `io.github.ClawCall-Dev/clawcall` (hosted remote + npm stdio).
-
 ## What users learn on install
 
 When the skill is installed or first introduced, the agent should explain:
@@ -47,7 +37,7 @@ When the skill is installed or first introduced, the agent should explain:
 - The user can be patched in live when a call needs identity verification, negotiation, or a real-time decision
 - Users can configure reusable voice, personality, greeting, and inbound reserved-number answering preferences
 - Completed calls return the outcome first, with transcript details and a temporary recording URL available
-- The first call auto-creates a low-privilege API key, and new users get 10 free minutes or 10 calls, whichever comes first
+- New users get 10 free minutes or 10 calls, whichever comes first
 
 ## What it does
 
