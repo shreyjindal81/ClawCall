@@ -1,0 +1,21 @@
+{
+  "name": "clawcall",
+  "version": "1.0.0",
+  "description": "AI-powered US phone calling via ClawCall hosted MCP — place calls, poll transcripts, live handoff.",
+  "author": {
+    "name": "ClawCall",
+    "email": "support@clawcall.dev"
+  },
+  "homepage": "https://clawcall.dev",
+  "repository": "https://github.com/ClawCall-Dev/ClawCall",
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "phone",
+    "calling",
+    "voice",
+    "telephony",
+    "clawcall",
+    "remote-mcp"
+  ]
+}

@@ -1,23 +1,56 @@
 # @clawcall/mcp
 
-MCP server wrapping the ClawCall REST API for AI-powered US phone calls.
+MCP connectivity for ClawCall — AI-powered US phone calls.
 
-ClawCall places real outbound phone calls in the US (+1 only). This package is a stdio
-MCP server that exposes the ClawCall REST contract as tools any MCP host (Claude Code,
-Claude Desktop, Cursor, Windsurf) can call. It is a stateless client over the public API
-at `https://api.clawcall.dev` — it imports nothing from the ClawCall server.
+ClawCall places real outbound phone calls in the US (+1 only).
 
-## Install / register
+## Hosted remote MCP (recommended)
+
+```text
+https://api.clawcall.dev/mcp
+```
+
+- Transport: Streamable HTTP (MCP `2026-07-28`, legacy negotiation supported)
+- Auth: OAuth 2.1 (authorization code + PKCE). No API key on this surface.
+- Clients: Cursor, ChatGPT, Claude, Cowork, Codex, and other remote MCP hosts
+
+Add the URL as a custom / remote MCP connector and sign in to ClawCall when prompted.
+
+The hosted surface exposes call placement, polling, transcripts, history, recordings,
+hangup, account status, and calling-guide tools. Call `get_calling_guide` (topic
+`outbound`) before every `place_call`. `outcome` is the phone network, not task success.
+
+Official registry name: `io.github.ClawCall-Dev/clawcall` (includes this remote).
+
+## Local stdio MCP (this package)
+
+This package is a stdio MCP server that exposes the ClawCall REST contract as tools
+any MCP host (Claude Code, Claude Desktop, Cursor, Windsurf) can call. It is a
+stateless client over the public API at `https://api.clawcall.dev` — it imports
+nothing from the ClawCall server.
+
+### Install / register
 
 Add the server to your MCP client config:
 
 ```json
-{ "mcpServers": { "clawcall": { "command": "npx", "args": ["-y", "@clawcall/mcp"], "env": { "CLAWCALL_API_KEY": "optional", "CLAWCALL_BASE_URL": "https://api.clawcall.dev" } } } }
+{
+  "mcpServers": {
+    "clawcall": {
+      "command": "npx",
+      "args": ["-y", "@clawcall/mcp"],
+      "env": {
+        "CLAWCALL_API_KEY": "optional",
+        "CLAWCALL_BASE_URL": "https://api.clawcall.dev"
+      }
+    }
+  }
+}
 ```
 
 Or, for Claude Code, the one-liner:
 
-```
+```bash
 claude mcp add clawcall -- npx -y @clawcall/mcp
 ```
 
@@ -25,7 +58,7 @@ The `env` block is **optional**. The ClawCall server self-provisions an API key 
 first call: an anonymous `place_call` auto-issues a proto-key, which this server captures
 and persists. You do not need to set `CLAWCALL_API_KEY` to get started.
 
-## Identity sharing
+### Identity sharing
 
 This MCP server reads and writes the **same** `~/.config/clawcall/key.json` file
 (`{ "api_key": "...", "user_phone_number": "..." }`) that the ClawCall agent skill uses.
@@ -36,7 +69,7 @@ If `CLAWCALL_API_KEY` is set in the environment, it **shadows** the file (an ope
 CI override). The saved file is otherwise the source of truth, and the proto-key issued on
 your first call is persisted there automatically (preserving any saved `user_phone_number`).
 
-## The workflow
+### The workflow
 
 A call runs for several minutes. The load-bearing loop is:
 
@@ -46,7 +79,7 @@ A call runs for several minutes. The load-bearing loop is:
    task success. An answered call can still fail the task.
 4. Read the transcript with `get_call_transcript` and judge it against the task you set.
 
-## Choosing a tool
+### Choosing a tool
 
 - **`place_call_and_wait`** is the single-foreground-call shortcut: it places the call and
   internally polls until finalized or a hard cap (~180 s, ceiling 240 s). On the cap it
@@ -57,7 +90,7 @@ A call runs for several minutes. The load-bearing loop is:
   **Never** use the blocking tool for campaigns. Never parallelize calls that
   book / buy / cancel / commit.
 
-## Caveats
+### Caveats
 
 - **`greeting` does NOT set the agent's first spoken line.** It is outbound-opener context
   only. The agent's actual opening line is a hardcoded recording disclosure on the server.
@@ -68,7 +101,7 @@ A call runs for several minutes. The load-bearing loop is:
 Trial limits are read from the live `quota` object in the error envelope — they are
 **never** hardcoded in this package, so the displayed numbers always match the server.
 
-## Environment variables
+### Environment variables
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -78,7 +111,7 @@ Trial limits are read from the live `quota` object in the error envelope — the
 | `CLAWCALL_WAIT_DEFAULT` | `180` | Default cap (seconds) for `place_call_and_wait`. |
 | `CLAWCALL_WAIT_CEILING` | `240` | Maximum allowed cap (seconds) for `place_call_and_wait`. |
 
-## More
+### More
 
 - [`skill-companion/MCP-COMPANION.md`](./skill-companion/MCP-COMPANION.md) — companion note
   for the ClawCall skill describing how the two share identity and workflow.

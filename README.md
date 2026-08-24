@@ -4,6 +4,16 @@ Make real AI-powered phone calls from any AI agent. ClawCall dials the number, h
 
 **10 free minutes or 10 calls. No setup. No API keys to configure.**
 
+## Hosted remote MCP (recommended)
+
+Remote MCP URL: `https://api.clawcall.dev/mcp`
+
+Auth: OAuth 2.1 (authorization code + PKCE). No API key on this surface.
+
+Add it as a custom / remote MCP connector in Cursor, ChatGPT, Claude, Cowork, Codex, or any host that supports Streamable HTTP MCP, then sign in to ClawCall when prompted.
+
+Cursor plugin (this repo): install from the Cursor Marketplace once listed, or import this repository as a team/local marketplace. The plugin ships `mcp.json` pointed at the hosted endpoint plus a calling skill.
+
 ## Install From ClawHub
 
 ```bash
@@ -14,9 +24,9 @@ Published skill: https://clawhub.ai/clawcall-dev/clawcall-dev
 
 Or manually, download the skill zip from ClawHub and add `SKILL.md` to your agent's skills directory.
 
-## MCP Server
+## Local stdio MCP Server
 
-Prefer the Model Context Protocol? [`mcp/`](./mcp) is a stdio MCP server that exposes the
+Prefer a local process? [`mcp/`](./mcp) is a stdio MCP server (`@clawcall/mcp`) that exposes the
 same ClawCall REST API as tools for any MCP host (Claude Code, Claude Desktop, Cursor,
 Windsurf). It shares one identity and balance with the skill.
 
@@ -24,9 +34,9 @@ Windsurf). It shares one identity and balance with the skill.
 claude mcp add clawcall -- npx -y @clawcall/mcp
 ```
 
-See [`mcp/README.md`](./mcp/README.md) for client config and the call workflow. The skill is
-the procedural layer; the MCP server is the connectivity layer — both wrap the public API at
-`https://api.clawcall.dev`.
+See [`mcp/README.md`](./mcp/README.md) for client config and the call workflow.
+
+Official MCP registry entry: `io.github.ClawCall-Dev/clawcall` (hosted remote + npm stdio).
 
 ## What users learn on install
 
@@ -61,7 +71,8 @@ When the skill is installed or first introduced, the agent should explain:
 
 - [Published ClawHub Skill](https://clawhub.ai/clawcall-dev/clawcall-dev)
 - [ClawCall Dashboard](https://clawcall.dev)
-- [API Documentation](https://api.clawcall.dev)
+- [API Documentation](https://clawcall.dev/docs)
+- [Official MCP registry](https://registry.modelcontextprotocol.io/)
 
 ## License
 
