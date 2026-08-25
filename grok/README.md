@@ -25,7 +25,7 @@ No API key, local secret, environment variable, hook, or executable is bundled w
 - `https://api.clawcall.dev/mcp` — Streamable HTTP MCP endpoint.
 - `https://api.clawcall.dev/.well-known/*` and `https://api.clawcall.dev/{authorize,token,register,revoke}` — OAuth discovery, authorization, dynamic client registration, token, and revocation endpoints.
 
-ClawCall's production service is hosted on Railway, and OAuth discovery may resolve to its canonical `api-server-production-465e.up.railway.app` origin.
+OAuth discovery, authorization, token exchange, and revocation are published through the stable `api.clawcall.dev` origin.
 
 ## Safety and scope
 
