@@ -58,7 +58,7 @@ Output format: JSON over HTTPS. Terminal call responses include `lifecycle`, `ou
 
 Output parameters: `call_id` (UUID), `lifecycle` ∈ {`queued`, `dialing`, `answered`, `finalized`}, `outcome` (10-value phone-network enum — see the API contract reference).
 
-Other properties: Calls are billed against the user's ClawCall balance or trial allotment (10 calls / 10 minutes, whichever lasts later). Recordings are retained per the ClawCall Terms of Service. The agent should treat saved API keys as credentials.
+Other properties: Calls are billed against the user's ClawCall balance or trial allotment (30 calls / 30 minutes, whichever lasts later). Recordings are retained per the ClawCall Terms of Service. The agent should treat saved API keys as credentials.
 
 ## Skill Version
 

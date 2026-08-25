@@ -126,7 +126,7 @@ Then offer transcript, recording, retry, callback, or live handoff when useful.
 
 When `lifecycle = "finalized"`:
 
-1. Check `outcome`.
+1. Check `outcome` and `outcome_detail.reason`; relay its message for non-answered calls.
 2. Read the transcript.
 3. Decide whether the user's goal was achieved.
 4. If blocked, identify exactly what was missing or what decision is needed.

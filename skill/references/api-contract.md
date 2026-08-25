@@ -96,6 +96,13 @@ Terminal responses include outcome, transcript, and recording fields:
   "lifecycle": "finalized",
   "outcome": "answered",
   "outcome_detail": {
+    "reason": {
+      "code": "answered",
+      "title": "Completed",
+      "message": "The call connected successfully.",
+      "retryable": false
+    },
+    "provider_error_code": null,
     "hangup_cause": "normal_clearing",
     "sip_hangup_cause": "200",
     "hangup_source": "callee"

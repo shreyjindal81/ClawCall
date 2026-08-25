@@ -7,6 +7,7 @@ Always preserve returned URLs exactly. They are personalized.
 | Code | What to do |
 | --- | --- |
 | `invalid_phone` (400) | Ask for a valid US `+1XXXXXXXXXX` number. |
+| `unsupported_destination` (400) | Explain that ClawCall currently supports US phone numbers only; ask for a US number. |
 | `missing_fields` (400) | Add both `to` and rich `task` Call instructions. |
 | `auth_required` (401) | Send the returned sign-up/auth URL or ask for an API key. |
 | `invalid_api_key` (401) | Remove/replace the saved key, or make an unauthenticated first call to get a new proto key. |
@@ -31,6 +32,8 @@ Always preserve returned URLs exactly. They are personalized.
 
 ## Outcomes
 
+For terminal calls, prefer the server-provided `outcome_detail.reason.message` and use `outcome_detail.reason.retryable` to decide whether to offer a retry. The table below is fallback guidance for older servers.
+
 | Outcome | Tell the user | Next step |
 | --- | --- | --- |
 | `answered` | Summarize task result from transcript. | Offer transcript/recording or follow-up. |
@@ -46,7 +49,7 @@ Always preserve returned URLs exactly. They are personalized.
 
 ## Trial And Balance
 
-New users get trial access for 10 calls and 10 minutes, whichever lasts later. A trial call counts only after it finalizes with at least 5 seconds of talk time.
+New users get trial access for 30 calls and 30 minutes, whichever lasts later. A trial call counts only after it finalizes with at least 5 seconds of talk time.
 
 Do not check balance before every call. Place the call and handle returned errors.
 
