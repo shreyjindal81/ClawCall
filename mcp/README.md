@@ -1,5 +1,8 @@
 # @clawcall/mcp
 
+> [!IMPORTANT]
+> **Legacy local transport.** New integrations should use ClawCall's hosted OAuth MCP connector at `https://api.clawcall.dev/mcp`. This stdio package remains available for existing local/API-key installations, but it is not the connector submitted to the official xAI marketplace.
+
 MCP server wrapping the ClawCall REST API for AI-powered US phone calls.
 
 ClawCall places real outbound phone calls in the US (+1 only). This package is a stdio

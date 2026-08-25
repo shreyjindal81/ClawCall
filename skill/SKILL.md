@@ -175,7 +175,7 @@ X-Api-Key: clawcall_sk_...
 
 Poll until `lifecycle = "finalized"`. Lifecycle values are `queued`, `dialing`, `answered`, `finalized`.
 
-Terminal responses include `outcome`, `talk_seconds`, `transcript`, and `recording_url`. `outcome` is phone-network outcome, not task success. An `answered` call can still fail to accomplish the user's goal. Read the transcript before reporting.
+Terminal responses include `outcome`, `outcome_detail.reason`, `talk_seconds`, `transcript`, and `recording_url`. For a non-answered call, relay the plain-language `outcome_detail.reason.message` and honor its `retryable` flag instead of inventing a generic failure explanation. `outcome` is phone-network outcome, not task success. An `answered` call can still fail to accomplish the user's goal. Read the transcript before reporting.
 
 Cancel/hang up:
 
@@ -190,7 +190,7 @@ Lead with the result, not the transcript dump. Include which number was called.
 
 When `lifecycle = "finalized"`:
 
-1. Check `outcome`.
+1. Check `outcome` and `outcome_detail.reason`.
 2. Read the transcript.
 3. Decide whether the user's goal was achieved.
 4. If blocked, identify exactly what was missing or what decision is needed.
@@ -296,17 +296,16 @@ Always preserve returned `action.url` and `action.sign_in_url` exactly.
 - `invalid_profile`: fix missing/invalid inbound `instructions` or `greeting`.
 - `invalid_handoff_number`: ask for an external reachable handoff number that is not a ClawCall number.
 
-New users get trial access for 10 calls and 10 minutes, whichever lasts later. A trial call counts only after it finalizes with at least 5 seconds of talk time.
+New users get trial access for 30 calls and 30 minutes, whichever lasts later. A trial call counts only after it finalizes with at least 5 seconds of talk time.
 
-## References
+## Must-Read References
 
-Rich details live here:
+These references are required, not optional background. Before acting, read the matching reference file for the workflow in front of you; read more than one when the task crosses workflows.
 
-- [Outbound calls](references/outbound-calls.md): deeper prep, live handoff, callbacks, after-call diagnosis.
-- [Profile and personality](references/profile-and-personality.md): global voice/personality/greeting and inbound profile setup.
-- [Inbound reserved numbers](references/inbound-reserved-numbers.md): full inbound profile setup and polling guidance.
-- [API contract](references/api-contract.md): complete request/response shapes.
-- [Examples](references/examples.md): rich outbound, callback, handoff, and inbound examples.
-- [Errors and limits](references/errors-and-limits.md): full error/outcome tables.
-- [Account linking and data](references/account-linking-and-data.md): API key, sign-in link, recordings, transcripts.
-- [Pressure scenarios](evals/pressure-scenarios.md): behavior checks for future edits.
+- [Outbound calls](references/outbound-calls.md): must read before placing, retrying, handing off, or following up on outbound calls.
+- [Inbound reserved numbers](references/inbound-reserved-numbers.md): must read before configuring, clearing, inspecting, or polling inbound reserved-number behavior.
+- [API contract](references/api-contract.md): must read when constructing requests, parsing responses, or relying on exact field names.
+- [Examples](references/examples.md): must read when building rich outbound, callback, handoff, campaign, or inbound instruction shapes.
+- [Errors and limits](references/errors-and-limits.md): must read before handling API errors, terminal outcomes, retries, quota, trial, or balance behavior.
+- [Account linking and data](references/account-linking-and-data.md): must read before account linking, key handling, saved phone-number behavior, recordings, transcripts, or privacy answers.
+- [Pressure scenarios](evals/pressure-scenarios.md): must read before evaluating or changing skill behavior.
